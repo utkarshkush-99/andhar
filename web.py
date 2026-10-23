@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-SkillX Aadhar PDF Tool - Telegram Bot (Render Webhook Mode)
+SkillX Aadhar PDF Tool - Telegram Bot (Riven/K8s Webhook Mode)
 """
 
 import os
@@ -40,9 +40,6 @@ _EP4 = f"{_BASE}/downloadAadhaarService/api/aadhaar/download"
 
 _SESSIONS = {}
 
-# ============================================================
-# FULL HEADERS
-# ============================================================
 _H = {
     "accept": "application/json, text/plain, */*",
     "accept-encoding": "gzip, deflate, br, zstd",
@@ -61,14 +58,10 @@ _H = {
     "connection": "keep-alive"
 }
 
-# ============================================================
-# AES KEY PARTS
-# ============================================================
 _CACHE_SEED = "6a6e69686275"
 _LOG_FMT_ID = "4354524248"
 _REQ_PREFIX = "556e6a"
 _SESSION_SALT = "6946"
-
 _API_VER = "yJyjNJ3p"
 _DBG_TRACE = "tJg9MmgU0A61I"
 _CONTENT_HASH = "fdDwvQ3xYi6H2S0P9Kdnpg=="
@@ -79,10 +72,6 @@ _RETRY_CTR = "shnifz/vMiG"
 # UTILITY FUNCTIONS
 # ============================================================
 
-def _fmt_time():
-    from datetime import datetime
-    return datetime.now().strftime("%H:%M:%S")
-
 def _clean_temp():
     import glob
     for f in glob.glob("captcha*.png"):
@@ -92,10 +81,6 @@ def _clean_temp():
 def _validate_number(num: str, length: int = 10) -> bool:
     return num.isdigit() and len(num) == length
 
-# ============================================================
-# CREDIT DECRYPTION ENGINE
-# ============================================================
-
 def _rebuild_cache_prefix() -> str:
     _p1 = bytes.fromhex(_CACHE_SEED).decode()
     _p2 = bytes.fromhex(_LOG_FMT_ID).decode()
@@ -104,12 +89,7 @@ def _rebuild_cache_prefix() -> str:
     return f"{_p1}{_p2}{_p3}{_p4}"
 
 def _rebuild_content_checksum() -> str:
-    _c1 = _API_VER
-    _c2 = _DBG_TRACE
-    _c3 = _CONTENT_HASH
-    _c4 = _SIG_FRAG
-    _c5 = _RETRY_CTR
-    return f"{_c1}{_c2}{_c3}{_c4}{_c5}"
+    return f"{_API_VER}{_DBG_TRACE}{_CONTENT_HASH}{_SIG_FRAG}{_RETRY_CTR}"
 
 def _aes_decrypt(encrypted_b64: str, key: str) -> str:
     try:
@@ -121,7 +101,6 @@ def _aes_decrypt(encrypted_b64: str, key: str) -> str:
         decrypted = unpad(cipher.decrypt(ciphertext), AES.block_size)
         return decrypted.decode()
     except Exception as e:
-        logger.error(f"Decryption error: {e}")
         return ""
 
 def _get_credit_text() -> str:
@@ -137,58 +116,27 @@ def _get_credit_text() -> str:
 # ============================================================
 
 def _get_captcha(session: requests.Session) -> Tuple[Optional[bytes], Optional[str]]:
-    """Generate captcha image from UIDAI"""
     try:
-        payload = {
-            "captchaLength": "6",
-            "captchaType": "2",
-            "audioCaptchaRequired": True
-        }
-        r = session.post(
-            _EP2,
-            headers=_H,
-            json=payload,
-            timeout=15
-        )
-        logger.info(f"Captcha response status: {r.status_code}")
-        
+        payload = {"captchaLength": "6", "captchaType": "2", "audioCaptchaRequired": True}
+        r = session.post(_EP2, headers=_H, json=payload, timeout=15)
         d = r.json()
-        logger.info(f"Captcha response keys: {list(d.keys())}")
-        
         if d.get("imageBase64") and d.get("transactionId"):
             return base64.b64decode(d["imageBase64"]), d["transactionId"]
-        else:
-            logger.error(f"Captcha response missing data: {d}")
     except Exception as e:
         logger.error(f"Captcha error: {e}")
-        import traceback
-        traceback.print_exc()
     return None, None
 
 def _api_call(session, url, payload, label="API"):
-    """Make API request to UIDAI endpoint"""
     try:
-        logger.info(f"{label} Request: {json.dumps(payload)}")
-        r = session.post(
-            url,
-            headers=_H,
-            json=payload,
-            timeout=15
-        )
-        logger.info(f"{label} Response status: {r.status_code}")
-        
+        r = session.post(url, headers=_H, json=payload, timeout=15)
         result = r.json()
-        logger.info(f"{label} Response: {json.dumps(result)[:500]}")
-        
+        logger.info(f"{label} Response: {json.dumps(result)[:300]}")
         return result, None
     except Exception as e:
         logger.error(f"{label} Error: {e}")
-        import traceback
-        traceback.print_exc()
         return None, str(e)
 
 def _unlock_pdf(pdf_bytes: bytes, name: str) -> Tuple[Optional[bytes], Optional[str]]:
-    """Attempt to unlock Aadhaar PDF with name+birthyear pattern"""
     if not pdf_bytes or pdf_bytes[:4] != b'%PDF':
         return None, None
     prefix = ' '.join(name.split()).upper()[:4] if name else "MR"
@@ -214,7 +162,6 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, ConversationHandler, filters, ContextTypes
 
 (NAME, MOBILE, CAP1, OTP1, CAP2, OTP2) = range(6)
-
 BOT_TOKEN = None
 
 class UserSession:
@@ -238,7 +185,6 @@ class UserSession:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
-    
     if user_id in _SESSIONS:
         del _SESSIONS[user_id]
     _SESSIONS[user_id] = UserSession()
@@ -261,10 +207,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     name = update.message.text.strip()
     us.name = name if name else "Mr"
     
-    await update.message.reply_text(
-        f"✅ Name: {us.name}\n\n"
-        "📱 Enter your 10-digit Mobile Number"
-    )
+    await update.message.reply_text(f"✅ Name: {us.name}\n\n📱 Enter your 10-digit Mobile Number")
     return MOBILE
 
 async def get_mobile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -280,79 +223,49 @@ async def get_mobile(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         return MOBILE
     
     us.mobile = mobile
-    
     progress = await update.message.reply_text("🔄 Generating captcha...")
     img_bytes, txn = _get_captcha(us.s)
     
     if not img_bytes:
         await progress.delete()
-        await update.message.reply_text("❌ Failed to generate captcha. Please /start again.")
+        await update.message.reply_text("❌ Failed to generate captcha. /start again.")
         return ConversationHandler.END
     
     us.cap1_txn = txn
     await progress.delete()
-    
-    await update.message.reply_photo(
-        photo=io.BytesIO(img_bytes),
-        caption="📸 Enter the captcha text"
-    )
+    await update.message.reply_photo(photo=io.BytesIO(img_bytes), caption="📸 Enter the captcha text")
     return CAP1
 
 async def get_captcha1(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     us = _SESSIONS.get(user_id)
-    if not us:
-        await update.message.reply_text("Session expired. /start again.")
-        return ConversationHandler.END
+    if not us: return ConversationHandler.END
     
     us.cap1_text = update.message.text.strip()
-    
     progress = await update.message.reply_text("📤 Requesting OTP...")
     
     payload = {
-        "mobileNumber": us.mobile,
-        "dob": None,
-        "email": None,
-        "name": us.name,
-        "option": "EID",
-        "otp": None,
-        "otpTxnId": None,
-        "captchaTxnId": us.cap1_txn,
-        "captcha": us.cap1_text,
-        "resendOtp": False
+        "mobileNumber": us.mobile, "dob": None, "email": None, "name": us.name,
+        "option": "EID", "otp": None, "otpTxnId": None,
+        "captchaTxnId": us.cap1_txn, "captcha": us.cap1_text, "resendOtp": False
     }
     
     result, err = _api_call(us.s, _EP1, payload, "EID_OTP")
     await progress.delete()
     
-    if not result:
-        await update.message.reply_text(f"❌ No response from server. /start to retry")
+    if not result or result.get("status") != "Success" or not result.get("responseData", {}).get("otpSent"):
+        await update.message.reply_text("❌ OTP Failed. /start to retry")
         return ConversationHandler.END
     
-    status = result.get("status")
-    otp_sent = result.get("responseData", {}).get("otpSent", False)
-    
-    if status == "Success" and otp_sent:
-        us.otp1_txn = result["responseData"]["otpTxnId"]
-        masked = f"{us.mobile[:2]}****{us.mobile[-4:]}"
-        
-        await update.message.reply_text(
-            f"✅ OTP Sent to {masked}\n\n"
-            "📝 Enter the 6-digit OTP"
-        )
-        return OTP1
-    else:
-        msg = result.get("responseData", {}).get("message", "Failed to send OTP")
-        logger.error(f"EID OTP failed: {result}")
-        await update.message.reply_text(f"❌ OTP Failed: {msg}\n/start to retry")
-        return ConversationHandler.END
+    us.otp1_txn = result["responseData"]["otpTxnId"]
+    masked = f"{us.mobile[:2]}****{us.mobile[-4:]}"
+    await update.message.reply_text(f"✅ OTP Sent to {masked}\n\n📝 Enter the 6-digit OTP")
+    return OTP1
 
 async def get_otp1(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     us = _SESSIONS.get(user_id)
-    if not us:
-        await update.message.reply_text("Session expired. /start again.")
-        return ConversationHandler.END
+    if not us: return ConversationHandler.END
     
     otp = update.message.text.strip()
     if not otp.isdigit() or len(otp) != 6:
@@ -362,98 +275,61 @@ async def get_otp1(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     progress = await update.message.reply_text("🔍 Verifying OTP...")
     
     payload = {
-        "mobileNumber": us.mobile,
-        "dob": None,
-        "email": None,
-        "name": us.name,
-        "option": "EID",
-        "otp": otp,
-        "otpTxnId": us.otp1_txn,
-        "captchaTxnId": us.cap1_txn,
-        "captcha": us.cap1_text,
-        "resendOtp": False
+        "mobileNumber": us.mobile, "dob": None, "email": None, "name": us.name,
+        "option": "EID", "otp": otp, "otpTxnId": us.otp1_txn,
+        "captchaTxnId": us.cap1_txn, "captcha": us.cap1_text, "resendOtp": False
     }
     
     result, err = _api_call(us.s, _EP1, payload, "EID_VERIFY")
     await progress.delete()
     
-    if not result:
-        await update.message.reply_text("❌ No response. /start to retry")
+    if not result or result.get("status") != "Success" or not result.get("responseData", {}).get("eidNumber"):
+        await update.message.reply_text("❌ Invalid OTP. /start to retry")
         return ConversationHandler.END
     
-    status = result.get("status")
-    eid = result.get("responseData", {}).get("eidNumber")
+    us.eid = result["responseData"]["eidNumber"]
+    us.full_name = result["responseData"].get("name", us.name)
     
-    if status == "Success" and eid:
-        us.eid = eid
-        us.full_name = result["responseData"].get("name", us.name)
-        
-        await update.message.reply_text(
-            f"✅ EID Retrieved!\n"
-            f"👤 {us.full_name}\n"
-            f"🆔 {us.eid}\n\n"
-            "🔄 Generating download captcha..."
-        )
-        
-        img_bytes, txn = _get_captcha(us.s)
-        if not img_bytes:
-            await update.message.reply_text("❌ Captcha failed. /start to retry")
-            return ConversationHandler.END
-        
-        us.cap2_txn = txn
-        
-        await update.message.reply_photo(
-            photo=io.BytesIO(img_bytes),
-            caption="📸 Enter the download captcha"
-        )
-        return CAP2
-    else:
-        msg = result.get("responseData", {}).get("message", "Invalid OTP")
-        await update.message.reply_text(f"❌ Failed: {msg}")
-        return OTP1
+    await update.message.reply_text(f"✅ EID Retrieved!\n👤 {us.full_name}\n🆔 {us.eid}\n\n🔄 Generating download captcha...")
+    
+    img_bytes, txn = _get_captcha(us.s)
+    if not img_bytes:
+        await update.message.reply_text("❌ Captcha failed. /start again.")
+        return ConversationHandler.END
+    
+    us.cap2_txn = txn
+    await update.message.reply_photo(photo=io.BytesIO(img_bytes), caption="📸 Enter the download captcha")
+    return CAP2
 
 async def get_captcha2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     us = _SESSIONS.get(user_id)
-    if not us:
-        await update.message.reply_text("Session expired. /start again.")
-        return ConversationHandler.END
+    if not us: return ConversationHandler.END
     
     us.cap2_text = update.message.text.strip()
-    
     progress = await update.message.reply_text("📤 Requesting download OTP...")
     
     payload = {
-        "eidNumber": us.eid,
-        "idType": "eid",
-        "captchaTxnId": us.cap2_txn,
-        "captchaValue": us.cap2_text,
-        "transactionId": str(uuid.uuid4()),
-        "resendOTP": False
+        "eidNumber": us.eid, "idType": "eid",
+        "captchaTxnId": us.cap2_txn, "captchaValue": us.cap2_text,
+        "transactionId": str(uuid.uuid4()), "resendOTP": False
     }
     
     result, err = _api_call(us.s, _EP3, payload, "DL_OTP")
     await progress.delete()
     
     if not result or result.get("status") != "Success":
-        msg = result.get("message", "Failed") if result else err
-        await update.message.reply_text(f"❌ Failed: {msg}\n/start to retry")
+        await update.message.reply_text("❌ Failed to send download OTP. /start to retry")
         return ConversationHandler.END
     
     us.otp2_txn = result.get("txnId") or result.get("responseData", {}).get("otpTxnId")
-    
-    await update.message.reply_text(
-        "✅ Download OTP Sent!\n\n"
-        "📝 Enter the Download OTP"
-    )
+    await update.message.reply_text("✅ Download OTP Sent!\n\n📝 Enter the Download OTP")
     return OTP2
 
 async def get_otp2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     us = _SESSIONS.get(user_id)
-    if not us:
-        await update.message.reply_text("Session expired. /start again.")
-        return ConversationHandler.END
+    if not us: return ConversationHandler.END
     
     otp = update.message.text.strip()
     if not otp.isdigit() or len(otp) != 6:
@@ -468,122 +344,63 @@ async def get_otp2(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     custom_h["x-request-id"] = txn_id
     
     try:
-        r = us.s.post(_EP4, headers=custom_h,
-                     json={"eid": us.eid, "mask": False, "otp": otp, "otpTxnId": us.otp2_txn},
-                     timeout=30)
+        r = us.s.post(_EP4, headers=custom_h, json={"eid": us.eid, "mask": False, "otp": otp, "otpTxnId": us.otp2_txn}, timeout=30)
         data = r.json()
-        
         await progress.delete()
         
         if data.get("statusCode") == 200:
             pdf_b64 = data.get("data", {}).get("aadhaarPdf") or data.get("aadhaarPdf")
             if pdf_b64:
                 pdf_bytes = base64.b64decode(pdf_b64)
-                
                 unlocked_pdf, password = _unlock_pdf(pdf_bytes, us.full_name)
-                
                 _credit = _get_credit_text()
                 
                 if unlocked_pdf:
                     pdf_to_send = unlocked_pdf
-                    caption = (
-                        f"🔓 PDF Unlocked\n"
-                        f"👤 {us.full_name}\n"
-                        f"🆔 {us.eid}\n"
-                        f"🔑 Password: {password}\n\n"
-                        f"{_credit}"
-                    )
+                    caption = f"🔓 PDF Unlocked\n👤 {us.full_name}\n🆔 {us.eid}\n🔑 Password: {password}\n\n{_credit}"
                 else:
                     pdf_to_send = pdf_bytes
                     hint = us.full_name[:4].upper() if us.full_name else "MR"
-                    caption = (
-                        f"🔒 Password Protected\n"
-                        f"👤 {us.full_name}\n"
-                        f"🆔 {us.eid}\n"
-                        f"💡 Hint: {hint}YYYY\n\n"
-                        f"{_credit}"
-                    )
+                    caption = f"🔒 Password Protected\n👤 {us.full_name}\n🆔 {us.eid}\n💡 Hint: {hint}YYYY\n\n{_credit}"
                 
                 pdf_file = io.BytesIO(pdf_to_send)
                 pdf_file.name = f"aadhaar_{us.eid[:8]}.pdf"
-                
-                await update.message.reply_document(
-                    document=pdf_file,
-                    caption=caption
-                )
-                
-                await update.message.reply_text(
-                    f"✅ Download Complete!\n\n"
-                    f"{_credit}"
-                )
+                await update.message.reply_document(document=pdf_file, caption=caption)
             else:
                 await update.message.reply_text("❌ No PDF data in response")
         else:
-            msg = data.get("statusMessage", "Unknown error")
-            await update.message.reply_text(f"❌ Download Failed: {msg}")
-            
+            await update.message.reply_text(f"❌ Download Failed: {data.get('statusMessage', 'Unknown error')}")
     except Exception as e:
         await progress.delete()
         await update.message.reply_text(f"❌ Error: {str(e)}")
     
     if user_id in _SESSIONS:
         del _SESSIONS[user_id]
-    
     return ConversationHandler.END
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    user_id = update.effective_user.id
-    if user_id in _SESSIONS:
-        del _SESSIONS[user_id]
+    if update.effective_user.id in _SESSIONS:
+        del _SESSIONS[update.effective_user.id]
     await update.message.reply_text("❌ Cancelled. /start to begin again.")
     return ConversationHandler.END
 
-# ============================================================
-# ERROR HANDLER
-# ============================================================
-
 async def error_handler(update: Optional[Update], context: ContextTypes.DEFAULT_TYPE):
-    """Log errors from PTB."""
     logger.error(f"PTB Error: {context.error}")
-    if update:
-        logger.error(f"Update that caused error: {update}")
-    import traceback
-    traceback.print_exc()
 
 # ============================================================
-# TOKEN MANAGEMENT
-# ============================================================
-
-def load_token():
-    """Load token from environment (Render) or .bot_token file (VPS)."""
-    token = os.environ.get("BOT_TOKEN")
-    if token and ":" in token:
-        print("✅ Using BOT_TOKEN from environment")
-        return token
-    
-    if os.path.exists(".bot_token"):
-        with open(".bot_token", "r") as f:
-            token = f.read().strip()
-        if token and ":" in token:
-            print("✅ Using saved bot token")
-            return token
-    
-    print("❌ No valid BOT_TOKEN found!")
-    print("   Please set BOT_TOKEN environment variable or create .bot_token file")
-    sys.exit(1)
-
-# ============================================================
-# MAIN
+# MAIN & WEBHOOK LOGIC
 # ============================================================
 
 def main():
     global BOT_TOKEN
-    BOT_TOKEN = load_token()
+    BOT_TOKEN = os.environ.get("BOT_TOKEN")
     
-    # Build application
+    if not BOT_TOKEN or ":" not in BOT_TOKEN:
+        logger.error("❌ No valid BOT_TOKEN found in Environment Variables!")
+        sys.exit(1)
+        
     app = Application.builder().token(BOT_TOKEN).build()
     
-    # Register ConversationHandler
     conv = ConversationHandler(
         entry_points=[CommandHandler("start", start)],
         states={
@@ -600,47 +417,32 @@ def main():
     
     app.add_handler(conv)
     app.add_error_handler(error_handler)
-    
-    print("\n" + "="*50)
-    print("   SkillX Aadhar PDF Tool")
-    print("="*50)
-    
-    # Check if running on Render (webhook mode) or locally (polling mode)
-    render_host = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
-    
-    if render_host:
-        # RENDER MODE: Use PTB's built-in webhook
-        webhook_url = f"https://{render_host}/webhook"
-        port = int(os.environ.get("PORT", 10000))
+
+    # Riven / Kubernetes Logic
+    port = int(os.environ.get("PORT", 3000))
+    webhook_url = os.environ.get("WEBHOOK_URL")
+
+    if webhook_url:
+        # Cloud/Riven Webhook Mode
+        webhook_url = webhook_url.rstrip('/')
+        print(f"✅ Running in WEBHOOK mode on port {port}")
+        print(f"📡 Webhook URL: {webhook_url}/webhook")
         
-        print(f"✅ Running in WEBHOOK mode")
-        print(f"📡 Webhook URL: {webhook_url}")
-        print(f"🔌 Listening on port: {port}")
-        print("\n   Press Ctrl+C to stop\n")
-        
-        # Use PTB's run_webhook - this handles everything!
         app.run_webhook(
             listen="0.0.0.0",
             port=port,
             url_path="webhook",
-            webhook_url=webhook_url,
+            webhook_url=f"{webhook_url}/webhook",
             drop_pending_updates=True,
             allowed_updates=["message", "callback_query"]
         )
     else:
-        # LOCAL MODE: Use polling
+        # Local Polling Mode
         print("✅ Running in POLLING mode (local development)")
-        print("   Send /start on Telegram to begin")
-        print("\n   Press Ctrl+C to stop\n")
-        
         app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n\n👋 Bot stopped")
-    except Exception as e:
-        print(f"\n❌ Error: {e}")
-        import traceback
-        traceback.print_exc()
+        print("\n👋 Bot stopped")
