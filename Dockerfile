@@ -1,17 +1,10 @@
-# Use an official Python runtime as a parent image
 FROM python:3.10-slim
 
-# Set the working directory in the container
+RUN apt-get update && apt-get install -y libqpdf-dev gcc g++ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-
-# Copy the requirements file into the container
 COPY requirements.txt .
-
-# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy the rest of your bot's code into the container
 COPY . .
 
-# Command to run the bot
-CMD ["python", "web.py"]
+CMD ["python", "main.py"]
